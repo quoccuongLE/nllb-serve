@@ -22,7 +22,7 @@ from . import log, DEF_MODEL_ID
 device = torch.device(torch.cuda.is_available() and 'cuda' or 'cpu')
 log.info(f'torch device={device}')
 
-#DEF_MODEL_ID = "facebook/nllb-200-distilled-600M"
+# DEF_MODEL_ID = "facebook/nllb-200-distilled-600M"
 DEF_SRC_LNG = 'eng_Latn'
 DEF_TGT_LNG = 'kan_Knda'
 FLOAT_POINTS = 4
@@ -42,7 +42,7 @@ sys_info = {
     'GPU': '[unavailable]',
 }
 try:
-    sys_info['torch']: torch.__version__
+    sys_info['torch']: torch.__version__ # type: ignore
     if torch.cuda.is_available():
         sys_info['GPU'] = str(torch.cuda.get_device_properties('cuda'))
         sys_info['Cuda Version'] = torch.version.cuda
@@ -93,7 +93,7 @@ def attach_translate_route(
     @lru_cache(maxsize=256)
     def get_tokenizer(src_lang=def_src_lang):
         log.info(f"Loading tokenizer for {model_id}; src_lang={src_lang} ...")
-        #tokenizer = AutoTokenizer.from_pretrained(model_id)
+        # tokenizer = AutoTokenizer.from_pretrained(model_id)
         return AutoTokenizer.from_pretrained(model_id, src_lang=src_lang)
 
     @bp.route('/')
@@ -101,7 +101,6 @@ def attach_translate_route(
         args = dict(src_langs=src_langs, tgt_langs=tgt_langs, model_id=model_id,
                     def_src_lang=def_src_lang, def_tgt_lang=def_tgt_lang)
         return render_template('index.html', **args)
-
 
     @bp.route("/translate", methods=["POST", "GET"])
     def translate():
@@ -126,26 +125,28 @@ def attach_translate_route(
         src_lang = args.get('src_lang') or def_src_lang
         tgt_lang = args.get('tgt_lang') or def_tgt_lang
         sen_split = args.get('sen_split')
-                        
+
         tokenizer = get_tokenizer(src_lang=src_lang)
 
         if not sources:
             return "Please submit 'source' parameter", 400
-        
+
         if sen_split:
             if not ssplit_lang(src_lang):
                 return "Sentence splitter for this langauges is not availabe", 400 
             sources, index  = sentence_splitter(src_lang, sources)           
-        
+
         max_length = 80
         inputs = tokenizer(sources, return_tensors="pt", padding=True)
         inputs = {k:v.to(device) for k, v in inputs.items()}
 
         translated_tokens = model.generate(
-            **inputs, forced_bos_token_id=tokenizer.lang_code_to_id[tgt_lang],
-            max_length = max_length)
+            **inputs,
+            forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang),
+            max_length=max_length,
+        )
         output = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
-        
+
         if sen_split:
             results = []           
             for i in range(1, len(index)):
@@ -153,7 +154,7 @@ def attach_translate_route(
                 results.append(" ".join(batch))
         else:
             results = output 
-                    
+
         res = dict(source=sources, translation=results,
                    src_lang = src_lang, tgt_lang=tgt_lang,
                    time_taken = round(time.time() - st, 3), time_units='s')
